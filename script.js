@@ -1,6 +1,6 @@
 // --- Configuración de Supabase ---
-const SUPABASE_URL = 'TU_SUPABASE_URL'; // Pega tu URL aquí
-const SUPABASE_ANON_KEY = 'TU_SUPABASE_ANON_KEY'; // Pega tu clave Anon aquí
+const SUPABASE_URL = 'https://azlyezhhjdwtvqdgjuxo.supabase.co'; // Pega tu URL aquí
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6bHllemhoamR3dHZxZGdqdXhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMzMzgzOTEsImV4cCI6MjA1ODkxNDM5MX0.5Wt9cRD2CqheK5z2522kToQMI70dNhQIZ0zi33OGrHw'; // Pega tu clave Anon aquí
 
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
