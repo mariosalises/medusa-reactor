@@ -1,0 +1,61 @@
+body { font-family: sans-serif; margin: 20px; }
+header, footer { text-align: center; margin-bottom: 20px; }
+.reactor-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); /* 4 columnas */
+    gap: 15px; /* Espacio entre círculos */
+    max-width: 400px; /* Ancho máximo del grid */
+    margin: 20px auto; /* Centrar el grid */
+}
+.reactor-position {
+    aspect-ratio: 1 / 1; /* Hacerlo cuadrado, que parecerá círculo con border-radius */
+    border: 2px solid #ccc;
+    border-radius: 50%; /* Hacerlo circular */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    cursor: pointer;
+    background-color: #f0f0f0; /* Color por defecto (libre) */
+    position: relative; /* Para posicionar info dentro */
+    overflow: hidden; /* Para tooltips si se añaden */
+    text-align: center;
+    font-size: 10px; /* Ajustar tamaño */
+    padding: 5px;
+    box-sizing: border-box;
+}
+.reactor-position.occupied {
+     border: 2px solid black; /* O algo para indicar ocupado */
+}
+/* Añadiremos colores específicos por longitud de onda más tarde */
+
+form label { display: block; margin-top: 10px; }
+form input, form textarea, form button { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box;}
+form button { background-color: #0078d4; color: white; border: none; cursor: pointer; margin-top: 15px;}
+form button:hover { background-color: #005a9e; }
+
+/* Estilos básicos para el calendario (requiere FullCalendar CSS) */
+#calendar { max-width: 900px; margin: 20px auto; }
+
+/* Estilos para tooltip (opcional, mejora) */
+.tooltip {
+    visibility: hidden;
+    width: 150px;
+    background-color: black;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 0;
+    position: absolute;
+    z-index: 1;
+    bottom: 105%; /* Posición encima del círculo */
+    left: 50%;
+    margin-left: -75px; /* Centrar el tooltip */
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 12px;
+}
+.reactor-position:hover .tooltip {
+    visibility: visible;
+    opacity: 1;
+}
