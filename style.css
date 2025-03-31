@@ -1,61 +1,148 @@
-body { font-family: sans-serif; margin: 20px; }
-header, footer { text-align: center; margin-bottom: 20px; }
+/* --- START OF FILE style.css (Modificado) --- */
+
+body > header.site-header {
+    text-align: left;
+    margin-bottom: 30px;
+    padding-left: 10px;
+}
+body > header.site-header > h1 {
+    font-size: 2.2em;
+    font-weight: bold;
+    color: #333;
+    margin-top: 0;
+    margin-bottom: 0.1em;
+    line-height: 1.2;
+}
+body > header.site-header > p.subtitle {
+    font-size: 2.2em;
+    color: #555;
+    margin-top: 0.1em;
+    margin-bottom: 0;
+}
+body { font-family: sans-serif; margin: 20px; background-color: #f8f9fa; }
+
+body > footer {
+    text-align: center;
+    margin-top: 10px;
+    margin-bottom: 20px;
+    padding-top: 1px;
+    border-top: 1px solid #eee;
+    font-size: 0.9em;
+    color: #666;
+}
+main h2 {
+    font-size: 1.7em;
+    margin-top: 2.5em;
+    margin-bottom: 1em;
+}
 .reactor-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr); /* 4 columnas */
-    gap: 15px; /* Espacio entre círculos */
-    max-width: 400px; /* Ancho máximo del grid */
-    margin: 20px auto; /* Centrar el grid */
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    max-width: 400px;
+    margin: 20px auto;
 }
+
+/* Estilo base del círculo (Contenedor del texto) */
 .reactor-position {
-    aspect-ratio: 1 / 1; /* Hacerlo cuadrado, que parecerá círculo con border-radius */
+    aspect-ratio: 1 / 1;
     border: 2px solid #ccc;
-    border-radius: 50%; /* Hacerlo circular */
+    border-radius: 50%;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     font-weight: bold;
     cursor: pointer;
-    background-color: #f0f0f0; /* Color por defecto (libre) */
-    position: relative; /* Para posicionar info dentro */
-    overflow: hidden; /* Para tooltips si se añaden */
+    position: relative;
+    overflow: hidden;
     text-align: center;
-    font-size: 10px; /* Ajustar tamaño */
     padding: 5px;
     box-sizing: border-box;
-}
-.reactor-position.occupied {
-     border: 2px solid black; /* O algo para indicar ocupado */
-}
-/* Añadiremos colores específicos por longitud de onda más tarde */
+    font-size: 14px;
+    z-index: 1;
+    background-color: transparent;
 
+    /* --- CAMBIO PRINCIPAL --- */
+    color: black; /* Texto SIEMPRE negro */
+    /*text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.922); */ /* Eliminado o comentado - No necesario con texto negro */
+}
+
+/* Pseudo-elemento para el COLOR DE FONDO */
+.reactor-position::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 50%;
+    background-color: var(--position-bg-color, #cccccc);
+    opacity: 1; /* Opacidad completa por defecto (estado ocupado) */
+    z-index: -1;
+    transition: opacity 0.3s ease, background-color 0.3s ease;
+}
+
+/* Opacidad reducida del FONDO (::before) cuando está LIBRE */
+.reactor-position:not(.occupied)::before {
+    opacity: 0.5; /* Sólo el fondo (::before) se vuelve semi-transparente */
+}
+
+/* Estilo específico cuando está OCUPADO */
+.reactor-position.occupied {
+     border: 3px solid black; /* Borde más grueso y oscuro */
+     /* No necesita cambiar 'color' aquí */
+}
+
+/* --- El resto de estilos se mantienen --- */
 form label { display: block; margin-top: 10px; }
 form input, form textarea, form button { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box;}
 form button { background-color: #0078d4; color: white; border: none; cursor: pointer; margin-top: 15px;}
 form button:hover { background-color: #005a9e; }
 
-/* Estilos básicos para el calendario (requiere FullCalendar CSS) */
 #calendar { max-width: 900px; margin: 20px auto; }
 
-/* Estilos para tooltip (opcional, mejora) */
 .tooltip {
     visibility: hidden;
-    width: 150px;
-    background-color: black;
-    color: #fff;
+    width: 160px;
+    background-color: rgba(0, 0, 0, 0.85);
+    color: #fff; /* El tooltip sí puede tener texto blanco */
     text-align: center;
     border-radius: 6px;
-    padding: 5px 0;
+    padding: 8px 5px;
     position: absolute;
-    z-index: 1;
-    bottom: 105%; /* Posición encima del círculo */
+    z-index: 10;
+    bottom: 105%;
     left: 50%;
-    margin-left: -75px; /* Centrar el tooltip */
+    margin-left: -80px;
     opacity: 0;
     transition: opacity 0.3s;
     font-size: 12px;
+    line-height: 1.4;
+    pointer-events: none;
 }
 .reactor-position:hover .tooltip {
     visibility: visible;
     opacity: 1;
 }
+
+.card {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+}
+.card h2 {
+    font-size: 1.5em;
+    margin-top: 0;
+    margin-bottom: 1em;
+    padding-bottom: 0.5em;
+    border-bottom: 1px solid #eee;
+    color: #444;
+}
+.card #export-button {
+    margin-top: 15px;
+}
+/* --- END OF FILE style.css (Modificado) --- */

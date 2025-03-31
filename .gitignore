@@ -1,0 +1,10 @@
+# Ignorar archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Si usaras Node.js en el futuro
+# node_modules/
+# .env
+
+# Otros archivos temporales o específicos del editor
+# .vscode/

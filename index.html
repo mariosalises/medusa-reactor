@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medusa Reactor Programming | Quicap AI Innovations</title>
+    <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"/> -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link rel="stylesheet" href="style.css">
     <!-- Incluir librería Supabase JS (CDN) -->
     <!-- Dentro del <head> de index.html -->
@@ -16,19 +18,22 @@
 </head>
 <body>
     <header>
-        <h1>Medusa Reactor Programming | Quicap AI Innovations</h1>
-        <p>Designed by Mario Sánchez</p>
+        <h1>Medusa Reactor Programming</h1> 
+        <p class="subtitle">Quicap AI Innovations</p>
     </header>
     <main>
+    <section class="card">
         <h2>Estado del Reactor</h2>
         <div id="reactor-grid" class="reactor-grid">
             <!-- Los 16 círculos se generarán aquí con JavaScript -->
         </div>
+    </section>
 
+    <section class="card">
         <h2>Reservar Posición</h2>
         <form id="reservation-form">
-            <label for="position">Posición (0-15):</label>
-            <input type="number" id="position" name="position" min="0" max="15" required><br>
+            <label for="position">Posición (1-16):</label>
+            <input type="number" id="position" name="position" min="1" max="16" required><br>
 
             <label for="user_name">Usuario:</label>
             <input type="text" id="user_name" name="user_name" required><br>
@@ -49,15 +54,18 @@
             <button type="submit">Reservar</button>
         </form>
          <div id="error-message" style="color: red;"></div>
+    </section>
 
         <!-- Aquí podríamos añadir el calendario y el botón de exportar más tarde -->
+    <section class="card">
         <h2>Calendario</h2>
         <div id="calendar"></div>
         <button id="export-button">Exportar a .ics</button>
+    </section>
 
     </main>
     <footer>
-        <p>Quicap AI Innovations</p>
+        <p class="designer-credit">Designed by Mario Sánchez © 2025</p>
     </footer>
 
     <script src="script.js"></script>

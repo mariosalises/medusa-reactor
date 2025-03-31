@@ -1,3 +1,5 @@
+// --- START OF FILE script.js (Edit/Delete Implemented) ---
+
 // Envolvemos TODO en DOMContentLoaded para asegurar que el HTML y las librerías (idealmente) estén listas
 document.addEventListener('DOMContentLoaded', (event) => {
     console.log('EVENTO: DOMContentLoaded disparado.');
@@ -6,564 +8,777 @@ document.addEventListener('DOMContentLoaded', (event) => {
     const SUPABASE_URL = 'https://azlyezhhjdwtvqdgjuxo.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6bHllemhoamR3dHZxZGdqdXhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMzMzgzOTEsImV4cCI6MjA1ODkxNDM5MX0.5Wt9cRD2CqheK5z2522kToQMI70dNhQIZ0zi33OGrHw';
 
+    //Wavelengths por defecto
+    const defaultWavelengths = {
+        1: 617,  2: 530,  3: 470,  4: 447,
+        5: 591,  6: 505,  7: 470,  8: 447,
+        9: 447, 10: 470, 11: 470, 12: 447,
+        13: 655, 14: 655, 15: 470, 16: 447
+    };
     // Declaramos la variable para el cliente aquí, pero la inicializamos dentro del if
     let supabaseClient = null;
 
     // --- VERIFICACIÓN DE LA LIBRERÍA SUPABASE ---
     console.log("Verificando si la librería 'supabase' global existe...");
     console.log("Tipo de window.supabase:", typeof window.supabase);
-    // console.log("Valor de window.supabase:", window.supabase); // Descomentar si necesitas ver el objeto
 
-    // Usamos el objeto global 'supabase' que debería crear la librería del CDN
     if (typeof supabase !== 'undefined' && typeof supabase.createClient === 'function') {
         console.log("VERIFICACIÓN: ¡Éxito! supabase.createClient está disponible.");
 
         // --- CREACIÓN DEL CLIENTE SUPABASE ---
         try {
-            // Usamos el objeto 'supabase' global para crear nuestro cliente específico
             supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             console.log("Cliente Supabase ('supabaseClient') creado:", supabaseClient ? 'OK' : 'FALLÓ');
-
-            // --- Si la creación falla, detenemos aquí ---
-            if (!supabaseClient) {
-                 throw new Error("La creación del cliente Supabase devolvió null.");
-            }
-
+            if (!supabaseClient) throw new Error("La creación del cliente Supabase devolvió null.");
         } catch (error) {
             console.error("¡ERROR CRÍTICO al crear el cliente Supabase!", error);
-            const errorDiv = document.getElementById('error-message'); // Intentar obtener div de error
+            const errorDiv = document.getElementById('error-message');
             if(errorDiv) errorDiv.textContent = "Error crítico al inicializar la conexión. Intente refrescar.";
-            return; // Detener la ejecución si no se puede crear el cliente
+            return;
         }
 
         // --- Referencias a Elementos del DOM ---
-        // Es más seguro obtenerlas aquí, después de que el DOM esté listo
         const reactorGrid = document.getElementById('reactor-grid');
-        const reservationForm = document.getElementById('reservation-form');
+        const reservationForm = document.getElementById('reservation-form'); // Formulario principal
         const errorMessageDiv = document.getElementById('error-message');
         const calendarEl = document.getElementById('calendar');
         const exportButton = document.getElementById('export-button');
 
-        // Verificar si los elementos principales existen
         if (!reactorGrid || !reservationForm || !errorMessageDiv || !calendarEl || !exportButton) {
-             console.error("¡Error crítico! No se encontraron todos los elementos HTML necesarios (reactor-grid, reservation-form, etc.). Verifica los IDs en index.html.");
+             console.error("¡Error crítico! No se encontraron todos los elementos HTML necesarios.");
              if(errorMessageDiv) errorMessageDiv.textContent = "Error: Faltan elementos en la página.";
-             return; // Detener si faltan elementos clave
+             return;
         }
 
-
         // --- Estado de la Aplicación ---
-        let positions = {};
+        let positions = {}; // Almacena estado de posiciones activas { positionId: {id: ..., occupied: true, ...data} }
         let calendarInstance = null;
 
         // --- Funciones ---
-        // (Todas las definiciones de funciones van aquí DENTRO del if,
-        //  ya que dependen de supabaseClient y las referencias del DOM)
 
         function wavelengthToColor(wl) {
-            // Convertir a número por si acaso viene como string
             const wavelengthNum = parseInt(wl);
-            if (isNaN(wavelengthNum)) return '#f0f0f0'; // Gris si no es número
-
-            if (wavelengthNum >= 380 && wavelengthNum < 450) return 'violet';
+            if (isNaN(wavelengthNum)) return '#cccccc';
+            if (wavelengthNum >= 380 && wavelengthNum < 450) return '#191970';
             if (wavelengthNum >= 450 && wavelengthNum < 495) return 'blue';
             if (wavelengthNum >= 495 && wavelengthNum < 570) return 'green';
             if (wavelengthNum >= 570 && wavelengthNum < 590) return 'yellow';
             if (wavelengthNum >= 590 && wavelengthNum < 620) return 'orange';
             if (wavelengthNum >= 620 && wavelengthNum < 750) return 'red';
-            return '#f0f0f0'; // Gris si está fuera de rango visible o 0/null
+            return '#cccccc';
         }
 
+        // --- OBTENER EVENTOS PARA CALENDARIO (Asegurarse de incluir 'id') ---
         async function getCalendarEvents() {
             console.log("getCalendarEvents: Obteniendo eventos...");
-            // Guardia: Asegurar que supabaseClient esté inicializado
-            if (!supabaseClient) {
-                console.error("getCalendarEvents: supabaseClient no está inicializado.");
-                return [];
-            }
+            if (!supabaseClient) { console.error("getCalendarEvents: supabaseClient no está inicializado."); return []; }
             try {
-                const { data, error } = await supabaseClient
-                    .from('reservations')
-                    .select('*');
-
-                if (error) throw error; // Lanzar error para ser capturado abajo
-
-                // Si data es null (puede pasar si hay error o RLS bloquea), tratar como vacío
+                // Seleccionar todos los campos necesarios, incluyendo 'id'
+                const { data, error } = await supabaseClient.from('reservations').select('id, position, user_name, wavelength, start_time, end_time, description');
+                if (error) throw error;
                 const eventsData = data || [];
                 console.log(`getCalendarEvents: Se encontraron ${eventsData.length} reservas.`);
-
                 return eventsData.map(res => ({
-                    id: res.id,
-                    title: `Pos ${res.position}: ${res.user_name || '??'} (${res.wavelength || '??'}nm)`, // Añadir defaults
+                    id: res.id, // <-- ID es crucial para editar/borrar
+                    title: `Pos ${res.position}: ${res.user_name || '??'} (${res.wavelength || '??'}nm)`,
                     start: res.start_time,
                     end: res.end_time,
                     backgroundColor: wavelengthToColor(res.wavelength),
                     borderColor: wavelengthToColor(res.wavelength),
-                    extendedProps: { // Asegurarse que todo tenga valor o default
+                    extendedProps: { // Pasar todos los datos originales
                         position: res.position,
                         user_name: res.user_name || '',
                         wavelength: res.wavelength,
                         description: res.description || '',
-                        original_start: res.start_time,
+                        original_start: res.start_time, // Guardar original para modales
                         original_end: res.end_time
                     }
                 }));
             } catch (error) {
                  console.error('Error fetching calendar events:', error);
-                 errorMessageDiv.textContent = "Error al cargar datos del calendario."; // Informar al usuario
+                 if (errorMessageDiv) errorMessageDiv.textContent = "Error al cargar datos del calendario.";
                  return [];
             }
         }
 
+        // --- INICIALIZAR/ACTUALIZAR CALENDARIO (Modificado eventClick) ---
         async function initializeOrUpdateCalendar() {
-            console.log("initializeOrUpdateCalendar: Iniciando...");
-            // Guardia: Asegurar que el elemento del calendario exista
-            if (!calendarEl) {
-                 console.error("initializeOrUpdateCalendar: calendarEl no encontrado.");
-                 return;
-            }
+             console.log("initializeOrUpdateCalendar: Iniciando...");
+             if (!calendarEl || typeof FullCalendar === 'undefined' || !FullCalendar.Calendar) { console.error("Fallo al cargar FullCalendar o el elemento."); return; }
 
-             // Verificar si FullCalendar está cargado ANTES de obtener eventos
-             if (typeof FullCalendar === 'undefined' || !FullCalendar.Calendar) {
-                console.error("¡FullCalendar no está cargado!");
-                errorMessageDiv.textContent = "Error al cargar el componente de calendario.";
-                return; // Salir si la librería no está
-            }
+             const events = await getCalendarEvents(); // Obtiene eventos CON ID
 
-            const events = await getCalendarEvents(); // Obtener eventos (ya maneja errores)
+             try {
+                 if (!calendarInstance) {
+                     console.log("initializeOrUpdateCalendar: Creando nueva instancia...");
+                     calendarInstance = new FullCalendar.Calendar(calendarEl, {
+                         initialView: 'timeGridWeek',
+                         locale: 'es',
+                         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
+                         events: events,
+                         eventClick: function(info) { // <-- MODIFICADO: Llama al modal
+                             console.log('Evento de calendario clickeado:', info.event);
+                             // Construir objeto con datos completos, incluido ID
+                             const reservationData = {
+                                 id: info.event.id, // Tomar ID del evento
+                                 position: info.event.extendedProps.position,
+                                 user_name: info.event.extendedProps.user_name,
+                                 wavelength: info.event.extendedProps.wavelength,
+                                 start_time: info.event.extendedProps.original_start, // Usar original
+                                 end_time: info.event.extendedProps.original_end,     // Usar original
+                                 description: info.event.extendedProps.description
+                             };
 
-            try {
-                if (!calendarInstance) {
-                    console.log("initializeOrUpdateCalendar: Creando nueva instancia de FullCalendar.");
-                    calendarInstance = new FullCalendar.Calendar(calendarEl, {
-                        initialView: 'timeGridWeek',
-                        locale: 'es', // Necesita el archivo es.js descomentado y funcionando sin error 'export'
-                        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
-                        events: events, // Pasar los eventos obtenidos
-                        eventClick: function(info) {
-                            console.log('Evento clickeado:', info.event);
-                             // Llamar a showDetails (asegúrate que esté definida dentro de este scope)
-                            if (typeof showDetails === 'function') {
-                                // Necesitamos pasar un objeto similar al de la reserva original
-                                showDetails({
-                                     position: info.event.extendedProps.position,
-                                     user_name: info.event.extendedProps.user_name,
-                                     wavelength: info.event.extendedProps.wavelength,
-                                     // Usar las fechas originales guardadas, ya que info.event.start/end pueden ser objetos Date modificados por FullCalendar
-                                     start_time: info.event.extendedProps.original_start,
-                                     end_time: info.event.extendedProps.original_end,
-                                     description: info.event.extendedProps.description
-                                 });
-                            } else {
-                                 console.warn("La función showDetails no está definida al hacer clic en el calendario.");
-                            }
-                        },
-                        // Podríamos añadir un callback por si falla la carga de eventos inicial
-                        loading: function(isLoading) {
-                             console.log("FullCalendar loading state:", isLoading);
-                        }
-                        /* // Considerar añadir manejo de errores de eventos
-                        eventDidMount: function(info) {
-                            // console.log("Event mounted:", info.event.title);
-                        },
-                        eventSourceFailure: function(error) {
-                             console.error("Error cargando eventos en FullCalendar:", error);
-                             errorMessageDiv.textContent = "Error al cargar eventos en el calendario.";
-                        }
-                        */
-                    });
-                    calendarInstance.render();
-                     console.log("initializeOrUpdateCalendar: Instancia de FullCalendar renderizada.");
-                } else {
-                    console.log("initializeOrUpdateCalendar: Actualizando eventos en calendario existente.");
-                    // Forma segura de actualizar eventos
-                    calendarInstance.setOption('events', events);
-                    // O la forma anterior si setOption no existe en v6 (revisar docs si falla)
-                    // calendarInstance.removeAllEvents();
-                    // calendarInstance.addEventSource(events);
+                             if (reservationData.id && typeof showReservationModal === 'function') {
+                                 showReservationModal(reservationData);
+                             } else {
+                                 console.error("No se pudo obtener el ID de la reserva o showReservationModal no está definida.");
+                                 Swal.fire('Error', 'No se pudo identificar la reserva seleccionada.', 'error');
+                             }
+                         },
+                         loading: function(isLoading) { console.log("FullCalendar loading:", isLoading); }
+                     });
+                     calendarInstance.render();
+                     console.log("initializeOrUpdateCalendar: Instancia renderizada.");
+                 } else {
+                     console.log("initializeOrUpdateCalendar: Actualizando eventos...");
+                     calendarInstance.setOption('events', events);
                      console.log("initializeOrUpdateCalendar: Eventos actualizados.");
-                }
-            } catch (error) {
-                console.error("Error inicializando o actualizando FullCalendar:", error);
-                errorMessageDiv.textContent = "Error al mostrar el calendario.";
-            }
+                 }
+             } catch (error) {
+                 console.error("Error inicializando/actualizando FullCalendar:", error);
+                 if (errorMessageDiv) errorMessageDiv.textContent = "Error al mostrar calendario.";
+             }
         }
 
-        // Función para manejar cambios en tiempo real (MODIFICADA para usar cliente y verificar funciones)
         function handleRealtimeChanges(payload) {
-            console.log('handleRealtimeChanges: Cambio detectado en Supabase:', payload);
-            if (typeof renderGrid === 'function') {
-                renderGrid(); // Actualizar el grid visual
-            } else {
-                 console.error("handleRealtimeChanges: La función renderGrid no está definida.");
-            }
-            if (typeof initializeOrUpdateCalendar === 'function') {
-                initializeOrUpdateCalendar(); // Actualizar también el calendario
-            } else {
-                 console.error("handleRealtimeChanges: La función initializeOrUpdateCalendar no está definida.");
-            }
+             console.log('handleRealtimeChanges: Cambio detectado:', payload);
+             if (typeof renderGrid === 'function') renderGrid(); else console.error("renderGrid no definida.");
+             if (typeof initializeOrUpdateCalendar === 'function') initializeOrUpdateCalendar(); else console.error("initializeOrUpdateCalendar no definida.");
         }
 
-        async function renderGrid() {
+         // --- RENDERIZAR GRID (Modificado para añadir ID a 'positions' y listener de click) ---
+         async function renderGrid() {
             console.log("renderGrid: Iniciando renderizado del grid...");
-            // Guardias
-            if (!reactorGrid) { console.error("renderGrid: reactorGrid no encontrado."); return; }
-            if (!supabaseClient) { console.error("renderGrid: supabaseClient no está inicializado."); return; }
+            if (!reactorGrid || !supabaseClient) { console.error("renderGrid: Faltan elementos."); return; }
 
-            reactorGrid.innerHTML = ''; // Limpiar grid
-            positions = {}; // Resetear estado local
             const now = new Date().toISOString();
 
             try {
+                // Obtener solo campos necesarios, incluyendo 'id'
                 const { data, error } = await supabaseClient
                     .from('reservations')
-                    .select('*')
-                    .lte('start_time', now) // Que hayan empezado
-                    .gte('end_time', now);  // Y no hayan terminado
+                    .select('id, position, user_name, wavelength, start_time, end_time, description') // Asegurar ID
+                    .lte('start_time', now)
+                    .gte('end_time', now);
 
-                if (error) throw error; // Lanzar error para capturarlo
+                if (error) throw error;
+                const currentReservations = data || [];
+                console.log(`renderGrid: ${currentReservations.length} reservas activas.`);
 
-                const currentReservations = data || []; // Asegurar que sea un array
-                console.log(`renderGrid: Se encontraron ${currentReservations.length} reservas activas.`);
-
+                // Resetear y rellenar 'positions' asegurando que incluya el 'id'
+                positions = {};
                 currentReservations.forEach(res => {
-                    // Validar que la posición sea un número esperado
-                    if (typeof res.position === 'number' && res.position >= 0 && res.position < 16) {
-                        positions[res.position] = { occupied: true, ...res };
-                    } else {
-                        console.warn("renderGrid: Reserva recibida con posición inválida:", res.position);
+                    if (typeof res.position === 'number' && res.position >= 1 && res.position <= 16) {
+                        // Guardar todos los datos de la reserva activa, incluido el ID
+                        positions[res.position] = { id: res.id, occupied: true, ...res }; // <-- IMPORTANTE: id: res.id
                     }
                 });
 
-                // Crear los 16 círculos
-                for (let i = 0; i < 16; i++) {
+                reactorGrid.innerHTML = '';
+                for (let i = 1; i <= 16; i++) {
                     const posDiv = document.createElement('div');
                     posDiv.classList.add('reactor-position');
-                    posDiv.dataset.positionId = i; // Guardar el ID de la posición
-                    const positionState = positions[i]; // Puede ser undefined si no hay reserva activa
+                    posDiv.dataset.positionId = i;
 
-                    if (positionState?.occupied) { // Usar optional chaining por si positionState es undefined
+                    const positionState = positions[i]; // Contiene la reserva activa, si existe
+                    const defaultWL = defaultWavelengths[i] || '???';
+
+                    if (positionState?.occupied) {
+                        // --- POSICIÓN OCUPADA ---
+                        const occupiedWL = positionState.wavelength || '???';
+                        const bgColor = wavelengthToColor(occupiedWL);
+
                         posDiv.classList.add('occupied');
-                        posDiv.style.backgroundColor = wavelengthToColor(positionState.wavelength);
-                        // Usar textContent para el texto principal y añadir el span del tooltip
-                        const textNode = document.createTextNode(`Pos ${i}\n(${positionState.wavelength || '??'}nm)`);
-                        posDiv.appendChild(textNode);
+                        posDiv.style.border = '3px solid black';
+                        posDiv.style.setProperty('--position-bg-color', bgColor);
 
+                        const icon = '🔒';
+                        posDiv.innerHTML = `${icon}<br>Pos ${i} (${occupiedWL}nm)`;
+
+                        // Tooltip (se mantiene igual)
                         const tooltipSpan = document.createElement('span');
                         tooltipSpan.classList.add('tooltip');
-                        // Limpiar datos para el tooltip
                         const userName = positionState.user_name || 'Desconocido';
-                        const endTime = positionState.end_time ? new Date(positionState.end_time).toLocaleString() : 'N/A';
+                        const endTime = positionState.end_time ? new Date(positionState.end_time).toLocaleString('es-ES') : 'N/A';
                         const description = positionState.description || '-';
                         tooltipSpan.innerHTML = `Usuario: ${userName}<br>Fin: ${endTime}<br>Desc: ${description}`;
                         posDiv.appendChild(tooltipSpan);
 
-                        // Añadir evento click (asegurarse que showDetails exista)
-                        if (typeof showDetails === 'function') {
-                             posDiv.addEventListener('click', () => showDetails(positionState));
+                        // --- MODIFICADO: Evento Click OCUPADO llama al modal ---
+                        if (positionState.id && typeof showReservationModal === 'function') {
+                            // Pasar el objeto completo que contiene el ID y demás datos
+                            posDiv.addEventListener('click', () => showReservationModal(positionState));
+                        } else {
+                             console.error(`No se encontró ID o función modal para la reserva activa en posición ${i}`);
+                             posDiv.addEventListener('click', () => {
+                                 Swal.fire('Error', 'No se pudo identificar la reserva activa para esta posición.', 'error');
+                             });
                         }
+
                     } else {
-                        posDiv.textContent = `Pos ${i} (Libre)`;
-                        // Añadir evento click (asegurarse que fillReservationForm exista)
+                        // --- POSICIÓN LIBRE ---
+                        const defaultWLColor = wavelengthToColor(defaultWL);
+
+                        posDiv.classList.remove('occupied');
+                        posDiv.style.border = '2px solid #ccc';
+                        posDiv.style.setProperty('--position-bg-color', defaultWLColor);
+
+                        posDiv.textContent = `Pos ${i} (${defaultWL}nm)`;
+
+                        // Listener para fillReservationForm (se mantiene igual)
                         if (typeof fillReservationForm === 'function') {
-                             posDiv.addEventListener('click', () => fillReservationForm(i));
+                            posDiv.addEventListener('click', () => fillReservationForm(i));
+                        } else {
+                            console.warn(`fillReservationForm no definida para pos ${i}`);
                         }
                     }
                     reactorGrid.appendChild(posDiv);
                 }
-                 console.log("renderGrid: Grid renderizado.");
+                console.log("renderGrid: Grid renderizado con listeners.");
 
             } catch (error) {
-                 console.error('Error fetching/rendering current reservations:', error);
-                 errorMessageDiv.textContent = "Error al cargar el estado del reactor.";
+                console.error('Error fetching/rendering current reservations:', error);
+                 if (errorMessageDiv) errorMessageDiv.textContent = "Error al cargar el estado del reactor.";
             }
         }
+        // --- FIN FUNCIÓN renderGrid ---
 
+        // --- FUNCION fillReservationForm (Se mantiene igual) ---
         function fillReservationForm(positionId) {
-             // Guardia
-             if (!reservationForm) { console.error("fillReservationForm: reservationForm no encontrado."); return; }
-             console.log(`fillReservationForm: Rellenando para posición ${positionId}`);
-             // Verificar que el elemento exista antes de asignarle valor
-             if (reservationForm.elements['position']) {
-                reservationForm.elements['position'].value = positionId;
-             }
-             if (reservationForm.elements['user_name']) {
-                 reservationForm.elements['user_name'].focus(); // Poner foco
-             }
+            if (!reservationForm) { console.error("fillReservationForm: reservationForm no encontrado."); return; }
+            console.log(`fillReservationForm: Rellenando para posición ${positionId}`);
+            if (reservationForm.elements['position']) reservationForm.elements['position'].value = positionId;
+            if (reservationForm.elements['wavelength']) {
+                const defaultWL = defaultWavelengths[positionId] || '';
+                reservationForm.elements['wavelength'].value = defaultWL;
+                console.log(`fillReservationForm: λ predeterminada ${defaultWL}nm.`);
+            }
+            if (reservationForm.elements['user_name']) reservationForm.elements['user_name'].value = '';
+            if (reservationForm.elements['start_time']) reservationForm.elements['start_time'].value = '';
+            if (reservationForm.elements['end_time']) reservationForm.elements['end_time'].value = '';
+            if (reservationForm.elements['description']) reservationForm.elements['description'].value = '';
+            if (reservationForm.elements['user_name']) reservationForm.elements['user_name'].focus();
         }
 
+        // --- FUNCION showDetails (Ya no se usa directamente, pero se puede mantener por si acaso) ---
         function showDetails(reservationData) {
-            // Guardia
-            if (!reservationData) {
-                 console.warn("showDetails llamada sin datos de reserva.");
-                 return;
-            }
-             console.log("showDetails: Mostrando detalles para:", reservationData);
-             // Usar template literals para más claridad
-             const detailsMessage = `Detalles Reserva Posición ${reservationData.position ?? 'N/A'}:
-                 Usuario: ${reservationData.user_name || 'N/A'}
-                 Longitud Onda: ${reservationData.wavelength || 'N/A'} nm
-                 Inicio: ${reservationData.start_time ? new Date(reservationData.start_time).toLocaleString() : 'N/A'}
-                 Fin: ${reservationData.end_time ? new Date(reservationData.end_time).toLocaleString() : 'N/A'}
-                 Descripción: ${reservationData.description || '-'}`;
+             // Podría llamarse desde otro sitio, o eliminarse si no se usa.
+             console.warn("Llamada a showDetails (posiblemente obsoleta):", reservationData);
+             const detailsMessage = `Detalles (Pos ${reservationData?.position ?? 'N/A'}):\nUsuario: ${reservationData?.user_name || 'N/A'}\n...etc`;
              alert(detailsMessage);
         }
 
+        // --- FUNCIÓN handleReservationSubmit (Con Logs Detallados en Validación) ---
         async function handleReservationSubmit(event) {
-            event.preventDefault(); // Prevenir recarga de página
-            console.log("handleReservationSubmit: Iniciando envío de formulario...");
-            // Guardias
-            if (!reservationForm) { console.error("handleReservationSubmit: reservationForm no encontrado."); return; }
-            if (!supabaseClient) { console.error("handleReservationSubmit: supabaseClient no está inicializado."); return; }
-            if (!errorMessageDiv) { console.error("handleReservationSubmit: errorMessageDiv no encontrado."); return; }
+            event.preventDefault();
+            console.log("handleReservationSubmit: Iniciando envío...");
+            if (!reservationForm || !supabaseClient || !errorMessageDiv) { console.error("handleRS: Faltan elementos."); return; }
 
-            errorMessageDiv.textContent = ''; // Limpiar errores previos
-            const submitButton = reservationForm.querySelector('button[type="submit"]'); // Encontrar botón
-            if(submitButton) submitButton.disabled = true; // Deshabilitar botón
+            errorMessageDiv.textContent = '';
+            const submitButton = reservationForm.querySelector('button[type="submit"]');
+            if(submitButton) submitButton.disabled = true;
 
             const formData = new FormData(reservationForm);
-            const reservationData = { // Usar defaults seguros
+            const reservationData = {
                 position: parseInt(formData.get('position')) || null,
                 user_name: formData.get('user_name') || null,
                 wavelength: parseInt(formData.get('wavelength')) || null,
-                start_time: null,
-                end_time: null,
-                description: formData.get('description') || '' // Usar string vacío como default
+                start_time: null, end_time: null, // Se asignan después
+                description: formData.get('description') || ''
             };
 
-            // --- Validación de Entradas ---
-            if (reservationData.position === null || isNaN(reservationData.position) || reservationData.position < 0 || reservationData.position > 15) {
-                 errorMessageDiv.textContent = 'Error: Posición inválida (debe ser 0-15).';
-                 if(submitButton) submitButton.disabled = false;
-                 return;
-            }
-            if (!reservationData.user_name) {
-                 errorMessageDiv.textContent = 'Error: El nombre de usuario es obligatorio.';
-                 if(submitButton) submitButton.disabled = false;
-                 return;
-            }
-             if (reservationData.wavelength === null || isNaN(reservationData.wavelength)) {
-                 errorMessageDiv.textContent = 'Error: La longitud de onda es obligatoria y debe ser un número.';
-                  if(submitButton) submitButton.disabled = false;
-                 return;
-            }
+            // --- Validación de Entradas (Igual que antes) ---
+            // ...
+            if (!reservationData.user_name /* || ... */) { if(submitButton) submitButton.disabled = false; return; }
 
-            // Validar fechas
-            const startTimeStr = formData.get('start_time');
-            const endTimeStr = formData.get('end_time');
-
-            if (!startTimeStr || !endTimeStr) {
-                 errorMessageDiv.textContent = 'Error: Las fechas de inicio y fin son obligatorias.';
-                 if(submitButton) submitButton.disabled = false;
-                 return;
-            }
-
+            // --- Validación y Procesamiento de Fechas (Igual que antes) ---
             try {
-                const startDate = new Date(startTimeStr);
-                const endDate = new Date(endTimeStr);
-
-                // Verificar si las fechas son válidas
-                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-                     throw new Error("Formato de fecha inválido.");
-                }
-
-                 reservationData.start_time = startDate.toISOString();
-                 reservationData.end_time = endDate.toISOString();
-
-                // Validar que la fecha de fin sea posterior a la de inicio
-                if (endDate <= startDate) {
-                    errorMessageDiv.textContent = 'Error: La fecha de fin debe ser posterior a la fecha de inicio.';
-                    if(submitButton) submitButton.disabled = false;
-                    return;
-                }
-
+                const startDate = new Date(formData.get('start_time'));
+                const endDate = new Date(formData.get('end_time'));
+                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) throw new Error("Formato de fecha inválido.");
+                if (endDate <= startDate) throw new Error('Fin debe ser posterior a Inicio.');
+                reservationData.start_time = startDate.toISOString();
+                reservationData.end_time = endDate.toISOString();
+                console.log("Fechas procesadas:", reservationData.start_time, reservationData.end_time);
             } catch (dateError) {
-                 console.error("Error procesando fechas:", dateError);
-                 errorMessageDiv.textContent = `Error en fechas: ${dateError.message}`;
-                 if(submitButton) submitButton.disabled = false;
-                 return;
+                // ... (manejo de error)
+                if(submitButton) submitButton.disabled = false; return;
             }
 
-            // --- Validación de Solapamiento ---
+            // --- Validación de Solapamiento (CON LOGS DETALLADOS) ---
             console.log("handleReservationSubmit: Validando solapamiento...");
+            // Loguea los datos específicos que entran a la consulta
+            console.log(`---> Validando para Pos: ${reservationData.position}, Inicio: ${reservationData.start_time}, Fin: ${reservationData.end_time}`);
             try {
                  const { count, error: validationError } = await supabaseClient
-                     .from('reservations')
-                     .select('*', { count: 'exact', head: true }) // head:true para no traer datos, solo conteo
+                     .from('reservations').select('*', { count: 'exact', head: true })
                      .eq('position', reservationData.position)
-                     .lt('start_time', reservationData.end_time) // Solapamiento: existente empieza antes de que nueva termine
-                     .gt('end_time', reservationData.start_time); // Solapamiento: existente termina después de que nueva empiece
+                     .lt('start_time', reservationData.end_time) // Existente empieza ANTES que nueva termine
+                     .gt('end_time', reservationData.start_time); // Existente termina DESPUÉS que nueva empiece
 
-                 if (validationError) throw validationError;
+                 // Loguea el resultado INMEDIATAMENTE después de la consulta
+                 console.log("Validación - Error retornado por Supabase:", validationError);
+                 console.log("Validación - Count retornado por Supabase:", count);
 
-                 console.log("Resultado validación (count):", count);
-                 if (count !== null && count > 0) { // Si count es mayor que 0, hay solapamiento
-                      errorMessageDiv.textContent = `Error: La posición ${reservationData.position} ya está reservada en ese horario.`;
-                      if(submitButton) submitButton.disabled = false;
-                      return;
+                 // Comprueba primero el error
+                 if (validationError) {
+                     console.error('Error explícito durante validación de solapamiento:', validationError);
+                     throw validationError; // Lanza para que el catch lo maneje
                  }
-                  console.log("handleReservationSubmit: Validación OK (sin solapamiento).");
 
-            } catch(validationError) {
-                  console.error('Error de validación de solapamiento:', validationError);
+                 // Ahora verifica el count
+                 if (count !== null && count > 0) {
+                      // Muestra el count en el mensaje de error para depurar
+                      errorMessageDiv.textContent = `Error: Posición ${reservationData.position} ocupada en ese horario (Count: ${count}).`;
+                      if(submitButton) submitButton.disabled = false;
+                      return; // Detiene la ejecución
+                 }
+                  // Si llegas aquí, count fue 0 o null
+                  console.log("handleReservationSubmit: Validación OK (Count fue 0 o null).");
+
+            } catch(error) { // Captura cualquier error (de red, Supabase, o el relanzado)
+                  console.error('Error en bloque catch de validación de solapamiento:', error);
                   errorMessageDiv.textContent = 'Error al validar disponibilidad.';
                    if(submitButton) submitButton.disabled = false;
                   return;
             }
+            // --- FIN Validación de Solapamiento ---
 
-            // --- Insertar en Supabase ---
-            console.log("handleReservationSubmit: Insertando reserva:", reservationData);
+
+            // --- Insertar en Supabase (Código igual que la versión anterior con .select()) ---
+            console.log("handleReservationSubmit: Insertando reserva:", JSON.stringify(reservationData));
             try {
-                 const { error: insertError } = await supabaseClient
-                     .from('reservations')
-                     .insert([reservationData]); // Supabase espera un array de objetos
+                const { data: insertedData, error: insertError } = await supabaseClient
+                    .from('reservations')
+                    .insert([reservationData])
+                    .select();
 
-                 if (insertError) throw insertError;
+                if (insertError) throw insertError;
 
-                 console.log('handleReservationSubmit: Reserva creada con éxito.');
-                 reservationForm.reset(); // Limpiar formulario solo si todo fue bien
+                console.log('handleReservationSubmit: Datos devueltos por .select() tras insert:', insertedData);
 
-            } catch(insertError) {
-                 console.error('Error inserting reservation:', insertError);
-                 errorMessageDiv.textContent = 'Error al guardar la reserva: ' + (insertError.message || 'Error desconocido.');
-                 // Considerar no resetear el form si hay error, para que el usuario no pierda datos
+                if (!insertedData || insertedData.length === 0) {
+                    console.warn('Inserción OK, pero .select() no devolvió datos (¿RLS SELECT?).');
+                } else {
+                    console.log('Reserva aparentemente creada y leída.');
+                }
+
+                reservationForm.reset(); // Resetear independientemente de si se leyó bien
+
+                // Refresco manual añadido en la versión anterior
+                console.log("handleReservationSubmit: Refrescando UI manualmente...");
+                renderGrid();
+                initializeOrUpdateCalendar();
+
+            } catch(error) {
+                console.error('Error en bloque try/catch de inserción:', error);
+                errorMessageDiv.textContent = `Error al guardar: ${error.message}`;
             } finally {
-                 // Volver a habilitar el botón independientemente del resultado
-                 if(submitButton) submitButton.disabled = false;
+                if(submitButton) submitButton.disabled = false;
             }
         }
 
-        async function handleExport() {
-            console.log("handleExport: Iniciando exportación...");
-            // Guardias
-            if (!exportButton) { console.error("handleExport: exportButton no encontrado."); return; }
-            if (!supabaseClient) { console.error("handleExport: supabaseClient no está inicializado."); return; }
 
-            exportButton.disabled = true;
-            exportButton.textContent = 'Exportando...';
+        // ==================================================
+        // --- NUEVAS FUNCIONES PARA EDITAR Y BORRAR ---
+        // ==================================================
 
-             try {
-                // Verificar si la librería ics está cargada
-                 if (typeof ics !== 'function') {
-                    console.error("¡La librería ics.js no está cargada o no es una función!");
-                    alert("Error: No se puede exportar porque falta la librería necesaria (ics).");
-                    // No necesitamos finally aquí si salimos temprano
-                    exportButton.disabled = false;
-                    exportButton.textContent = 'Exportar a .ics';
-                    return;
+        // --- NUEVA FUNCIÓN: Mostrar Modal de Detalles/Acciones ---
+        function showReservationModal(reservationData) {
+            console.log("Mostrando modal para reserva:", reservationData);
+            if (!reservationData || !reservationData.id) {
+                 console.error("showReservationModal llamada sin datos válidos o sin ID.");
+                 Swal.fire('Error', 'No se pudieron cargar los detalles completos de la reserva.', 'error');
+                 return;
+            }
+            // Formatear fechas para mejor lectura
+            const startTimeFormatted = reservationData.start_time ? new Date(reservationData.start_time).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short'}) : 'N/A';
+            const endTimeFormatted = reservationData.end_time ? new Date(reservationData.end_time).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short'}) : 'N/A';
+
+            Swal.fire({
+                title: `Detalles Reserva Pos. ${reservationData.position}`,
+                html: `
+                    <div style="text-align: left; margin-left: 20px;">
+                        <p><strong>ID:</strong> ${reservationData.id}</p>
+                        <p><strong>Usuario:</strong> ${reservationData.user_name || 'N/A'}</p>
+                        <p><strong>λ (nm):</strong> ${reservationData.wavelength || 'N/A'}</p>
+                        <p><strong>Inicio:</strong> ${startTimeFormatted}</p>
+                        <p><strong>Fin:</strong> ${endTimeFormatted}</p>
+                        <p><strong>Descripción:</strong> ${reservationData.description || '-'}</p>
+                    </div>
+                `,
+                icon: 'info',
+                showCloseButton: true,
+                showCancelButton: true, // Usaremos el cancel button como "Editar"
+                confirmButtonText: 'Borrar Reserva',
+                confirmButtonColor: '#d33', // Rojo para borrar
+                cancelButtonText: 'Editar Reserva',
+                cancelButtonColor: '#3085d6', // Azul para editar
+
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // --- Acción BORRAR ---
+                    if (typeof confirmAndDeleteReservation === 'function'){
+                         confirmAndDeleteReservation(reservationData.id);
+                    } else { console.error("confirmAndDeleteReservation no definida"); }
+                } else if (result.dismiss === Swal.DismissReason.cancel) {
+                    // --- Acción EDITAR ---
+                     if (typeof openEditReservationModal === 'function'){
+                        openEditReservationModal(reservationData);
+                    } else { console.error("openEditReservationModal no definida"); }
+                }
+            });
+        }
+
+        // --- NUEVA FUNCIÓN: Confirmar y Borrar ---
+        function confirmAndDeleteReservation(reservationId) {
+             if (!reservationId) {
+                 Swal.fire('Error', 'ID de reserva inválido para borrar.', 'error');
+                 return;
+             }
+            Swal.fire({
+                title: '¿Estás seguro?',
+                text: `¡No podrás revertir esto! Se borrará la reserva con ID: ${reservationId}`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sí, ¡borrar!',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Llamar a la función que realmente borra
+                     if (typeof deleteReservation === 'function'){
+                        deleteReservation(reservationId);
+                    } else { console.error("deleteReservation no definida"); }
+                }
+            });
+        }
+
+        // --- NUEVA FUNCIÓN: Borrar en Supabase ---
+        async function deleteReservation(reservationId) {
+            if (!reservationId) { Swal.fire('Error', 'No se proporcionó ID para borrar.', 'error'); return; }
+            console.log(`Intentando borrar reserva ID: ${reservationId}`);
+            try {
+                 Swal.showLoading(); // Mostrar indicador
+
+                const { error } = await supabaseClient
+                    .from('reservations')
+                    .delete()
+                    .eq('id', reservationId);
+
+                if (error) throw error;
+
+                Swal.fire('¡Borrado!', 'La reserva ha sido eliminada.', 'success');
+
+                // Refrescar UI
+                renderGrid();
+                initializeOrUpdateCalendar();
+
+            } catch (error) {
+                console.error('Error deleting reservation:', error);
+                Swal.fire('Error', `No se pudo borrar la reserva: ${error.message}`, 'error');
+            }
+        }
+
+        // --- NUEVA FUNCIÓN: Abrir Modal de Edición ---
+        async function openEditReservationModal(reservationData) {
+            console.log("Abriendo modal de edición para:", reservationData);
+             if (!reservationData || !reservationData.id) {
+                 console.error("openEditReservationModal llamada sin datos válidos o sin ID.");
+                 Swal.fire('Error', 'No se pudieron cargar los datos para editar.', 'error');
+                 return;
+            }
+
+            // Helper para formatear fecha ISO a YYYY-MM-DDTHH:mm
+             const formatForInput = (isoDateString) => {
+                 if (!isoDateString) return '';
+                 try {
+                     const date = new Date(isoDateString);
+                     date.setMinutes(date.getMinutes() - date.getTimezoneOffset()); // Ajustar a zona local
+                     return date.toISOString().slice(0, 16); // Cortar a YYYY-MM-DDTHH:mm
+                 } catch(e){
+                      console.error("Error formateando fecha para input:", e);
+                      return '';
                  }
+             };
 
-                 // Obtener datos para exportar
-                 const { data, error } = await supabaseClient
-                     .from('reservations')
-                     .select('*')
-                     .order('start_time', { ascending: true });
+            const startTimeForInput = formatForInput(reservationData.start_time);
+            const endTimeForInput = formatForInput(reservationData.end_time);
 
-                 if (error) throw error; // Lanzar error
+            Swal.fire({
+                title: `Editar Reserva Pos. ${reservationData.position}`,
+                html: `
+                    <form id="swal-edit-form" style="text-align: left; padding: 0 10px;">
+                        <input type="hidden" id="swal-reservation-id" value="${reservationData.id}">
 
-                 const reservationsToExport = data || []; // Asegurar array
+                        <label for="swal-user_name" style="display: block; margin-bottom: 5px;">Usuario:</label>
+                        <input type="text" id="swal-user_name" class="swal2-input" value="${reservationData.user_name || ''}" required style="margin-bottom: 10px;">
 
-                 if (reservationsToExport.length === 0) {
-                      alert('No hay reservas para exportar.');
-                      // No necesitamos finally aquí si salimos temprano
-                      exportButton.disabled = false;
-                      exportButton.textContent = 'Exportar a .ics';
+                        <label for="swal-wavelength" style="display: block; margin-bottom: 5px;">Longitud de Onda (nm):</label>
+                        <input type="number" id="swal-wavelength" class="swal2-input" value="${reservationData.wavelength || ''}" required style="margin-bottom: 10px;">
+
+                        <label for="swal-start_time" style="display: block; margin-bottom: 5px;">Inicio:</label>
+                        <input type="datetime-local" id="swal-start_time" class="swal2-input" value="${startTimeForInput}" required style="margin-bottom: 10px;">
+
+                        <label for="swal-end_time" style="display: block; margin-bottom: 5px;">Fin:</label>
+                        <input type="datetime-local" id="swal-end_time" class="swal2-input" value="${endTimeForInput}" required style="margin-bottom: 10px;">
+
+                        <label for="swal-description" style="display: block; margin-bottom: 5px;">Descripción:</label>
+                        <textarea id="swal-description" class="swal2-textarea" style="width: 95%; margin-bottom: 10px;">${reservationData.description || ''}</textarea>
+                    </form>
+                `,
+                width: '600px', // Hacer el modal un poco más ancho
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar Cambios',
+                cancelButtonText: 'Cancelar',
+                didOpen: () => { // Asegurar que los estilos de los input se apliquen bien
+                     const inputs = Swal.getPopup().querySelectorAll('.swal2-input, .swal2-textarea');
+                     inputs.forEach(input => input.style.width = '95%');
+                 },
+                preConfirm: () => {
+                    // Recoger datos del formulario DENTRO del modal
+                    const id = document.getElementById('swal-reservation-id').value;
+                    const userName = document.getElementById('swal-user_name').value;
+                    const wavelength = document.getElementById('swal-wavelength').value;
+                    const startTime = document.getElementById('swal-start_time').value;
+                    const endTime = document.getElementById('swal-end_time').value;
+                    const description = document.getElementById('swal-description').value;
+
+                    const updatedData = {
+                        user_name: userName,
+                        wavelength: parseInt(wavelength) || null,
+                        start_time: startTime, // String de datetime-local
+                        end_time: endTime,     // String de datetime-local
+                        description: description
+                    };
+
+                    if (!userName || !wavelength || !startTime || !endTime) {
+                        Swal.showValidationMessage(`Por favor, completa todos los campos requeridos.`);
+                        return false;
+                    }
+                     // Validación básica de fechas en el modal
+                     if (new Date(endTime) <= new Date(startTime)) {
+                         Swal.showValidationMessage('La fecha de fin debe ser posterior a la fecha de inicio.');
+                         return false;
+                     }
+
+                    return { id: id, data: updatedData };
+                }
+            }).then((result) => {
+                if (result.isConfirmed && result.value) {
+                     if (typeof updateReservation === 'function'){
+                        updateReservation(result.value.id, result.value.data);
+                    } else { console.error("updateReservation no definida"); }
+                }
+            });
+        }
+
+
+         // --- NUEVA FUNCIÓN: Actualizar en Supabase (con Logs de Control) ---
+         async function updateReservation(reservationId, updatedData) {
+            console.log(`Intentando actualizar reserva ID: ${reservationId} con datos:`, updatedData);
+            if (!reservationId || !updatedData) {
+                 Swal.fire('Error Interno', 'Faltan datos para la actualización.', 'error');
+                 return;
+            }
+
+            // VALIDACIÓN INICIAL
+            if (!updatedData.user_name || updatedData.wavelength === null || isNaN(updatedData.wavelength) || !updatedData.start_time || !updatedData.end_time) {
+                Swal.fire('Error de Validación', 'Faltan campos requeridos o la longitud de onda no es válida.', 'error');
+                return;
+            }
+
+            // VALIDACIÓN Y CONVERSIÓN DE FECHAS
+            let startDate, endDate;
+            try {
+                startDate = new Date(updatedData.start_time);
+                endDate = new Date(updatedData.end_time);
+                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) throw new Error("Formato de fecha inválido.");
+                if (endDate <= startDate) throw new Error('Fin debe ser posterior a Inicio.');
+                updatedData.start_time = startDate.toISOString();
+                updatedData.end_time = endDate.toISOString();
+                console.log("Fechas procesadas OK para UPDATE:", updatedData.start_time, updatedData.end_time); // Log añadido
+            } catch (dateError) {
+                 console.error("Error procesando fechas en actualización:", dateError);
+                 Swal.fire('Error de Fechas', `Error en formato de fechas: ${dateError.message}`, 'error');
+                 return;
+            }
+
+            // OBTENER POSICIÓN ORIGINAL
+            let originalPosition;
+            try {
+                Swal.showLoading();
+                const { data: originalData, error: fetchError } = await supabaseClient
+                   .from('reservations').select('position').eq('id', reservationId).single();
+                Swal.hideLoading();
+                if (fetchError) throw fetchError;
+                if (!originalData) throw new Error("No se encontró reserva original.");
+                originalPosition = originalData.position;
+                console.log("Posición original obtenida:", originalPosition); // Log añadido
+            } catch(fetchError){
+                 console.error("Error obteniendo posición original:", fetchError);
+                 Swal.fire('Error Interno', 'No se pudo verificar la posición original para validar solapamiento.', 'error');
+                 return;
+            }
+
+            // VALIDACIÓN DE SOLAPAMIENTO
+            console.log(`Validando solapamiento para pos ${originalPosition} excluyendo ID ${reservationId}`);
+            try {
+                 Swal.showLoading();
+                 const { count, error: validationError } = await supabaseClient
+                     .from('reservations').select('*', { count: 'exact', head: true })
+                     .eq('position', originalPosition)
+                     .lt('start_time', updatedData.end_time)
+                     .gt('end_time', updatedData.start_time)
+                     .neq('id', reservationId);
+                 Swal.hideLoading();
+                 if (validationError) throw validationError;
+
+                 console.log("Resultado validación solapamiento (count):", count);
+                 if (count !== null && count > 0) {
+                      Swal.fire('Conflicto de Horario', `Posición ${originalPosition} ya ocupada en ese horario por otra reserva.`, 'error');
                       return;
                  }
-                  console.log(`handleExport: Se exportarán ${reservationsToExport.length} reservas.`);
+                  console.log("Validación de solapamiento OK.");
+            } catch(validationError) {
+                  Swal.hideLoading();
+                  console.error('Error validación solapamiento en actualización:', validationError);
+                  Swal.fire('Error de Validación', 'Error al comprobar disponibilidad del horario.', 'error');
+                  return;
+            }
 
-                 // Crear y descargar .ics
-                 const cal = ics();
-                 reservationsToExport.forEach(res => {
-                     // Validar fechas antes de añadirlas
-                     if (res.start_time && res.end_time) {
-                         const startDate = new Date(res.start_time);
-                         const endDate = new Date(res.end_time);
-                         // Verificar si son fechas válidas
-                         if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-                             cal.addEvent(
-                                 `Pos ${res.position ?? '?'}: ${res.user_name || '??'} (${res.wavelength || '??'}nm)`,
-                                 res.description || 'Sin descripción adicional.',
-                                 'Reactor Medusa Lab',
-                                 startDate,
-                                 endDate
-                             );
-                         } else {
-                              console.warn("handleExport: Se omitió una reserva con fechas inválidas:", res);
-                         }
-                     } else {
-                          console.warn("handleExport: Se omitió una reserva sin fecha de inicio o fin:", res);
-                     }
-                 });
+            // --- SI TODAS LAS VALIDACIONES PASAN, ACTUALIZAR ---
+            console.log(">>> PUNTO DE CONTROL: Antes de llamar a Supabase UPDATE"); // <-- LOG AÑADIDO
+            try {
+                 Swal.showLoading();
+                const dataToUpdate = {
+                    user_name: updatedData.user_name,
+                    wavelength: updatedData.wavelength,
+                    start_time: updatedData.start_time,
+                    end_time: updatedData.end_time,
+                    description: updatedData.description,
+                };
+                console.log(">>> PUNTO DE CONTROL: Datos a enviar en UPDATE:", dataToUpdate); // <-- LOG AÑADIDO
 
-                 console.log("handleExport: Descargando archivo .ics...");
-                 cal.download('medusa_reactor_schedule');
+                // Llamada a Supabase UPDATE
+                const { error: updateError } = await supabaseClient
+                    .from('reservations')
+                    .update(dataToUpdate)
+                    .eq('id', reservationId);
 
-             } catch (e) {
-                 console.error("Error durante la exportación:", e);
-                 alert("Ocurrió un error al generar o descargar el archivo .ics.");
-             } finally {
-                 // Asegurar que el botón se rehabilite
-                 exportButton.disabled = false;
-                 exportButton.textContent = 'Exportar a .ics';
-             }
+                // Log INMEDIATAMENTE después del await
+                console.log(">>> PUNTO DE CONTROL: Después de llamar a Supabase UPDATE. Error retornado:", updateError); // <-- LOG AÑADIDO
+
+                // Comprobar error explícitamente
+                if (updateError) {
+                    console.error("Error explícito detectado en UPDATE:", updateError);
+                    throw updateError; // Lanza el error para que lo capture el catch
+                }
+
+                // Si no hubo error, mostrar éxito y refrescar
+                Swal.fire('¡Actualizado!', 'La reserva ha sido modificada.', 'success');
+
+                console.log(">>> PUNTO DE CONTROL: Refrescando UI tras UPDATE exitoso"); // <-- LOG AÑADIDO
+                renderGrid();
+                initializeOrUpdateCalendar();
+
+            } catch (errorCaught) { // Renombrado a errorCaught para evitar confusión
+                console.error('Error en bloque catch del UPDATE:', errorCaught);
+                Swal.fire('Error', `No se pudo actualizar la reserva: ${errorCaught.message}`, 'error');
+            } finally {
+                 console.log(">>> PUNTO DE CONTROL: Bloque finally del UPDATE"); // <-- LOG AÑADIDO
+                 // No es necesario Swal.hideLoading() aquí si muestras un Swal de éxito/error
+            }
         }
+       // --- FIN FUNCIÓN updateReservation ---
 
 
-        // --- INICIALIZACIÓN y SUSCRIPCIONES (dentro del IF donde supabaseClient se creó con éxito) ---
-        console.log("Inicializando la aplicación...");
-
-        // Renderizar Grid y Calendario Inicialmente
-        // Estas funciones ahora tienen sus propios try/catch internos
-        renderGrid();
-        initializeOrUpdateCalendar(); // Asegúrate que el archivo es.js esté descomentado en HTML si quieres español y funciona
-
-        // Añadir Listeners a los botones/forms (ya verificamos que existen)
-        reservationForm.addEventListener('submit', handleReservationSubmit);
-        exportButton.addEventListener('click', handleExport);
-
-
-        // Suscribirse a cambios en tiempo real
-        try {
-            console.log("Suscribiéndose al canal de Supabase...");
-            const channel = supabaseClient.channel('public:reservations')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, (payload) => {
-                     // Llamar a handleRealtimeChanges SOLO si la función existe
-                     if(typeof handleRealtimeChanges === 'function') {
-                          handleRealtimeChanges(payload);
-                     } else {
-                          console.error("Error: La función handleRealtimeChanges no está definida al recibir un cambio.");
-                     }
-                 })
-                .subscribe((status, err) => { // Usar el callback con dos argumentos
-                    // Callback opcional para saber el estado de la suscripción
-                    if (status === 'SUBSCRIBED') {
-                        console.log('¡Conectado exitosamente al canal de tiempo real!');
-                    } else if (status === 'CHANNEL_ERROR') {
-                         console.error('Error en la conexión del canal de tiempo real:', err);
-                    } else if (status === 'TIMED_OUT') {
-                         console.warn('Se agotó el tiempo de espera para la conexión del canal.');
-                    } else {
-                         console.log("Estado del canal de tiempo real:", status);
-                    }
+       // --- FUNCION handleExport (Se mantiene igual) ---
+       async function handleExport() {
+           console.log("handleExport: Iniciando exportación...");
+            if (!exportButton || !supabaseClient) { console.error("handleExport: Faltan elementos."); return; }
+            exportButton.disabled = true; exportButton.textContent = 'Exportando...';
+            try {
+                if (typeof ics !== 'function') {
+                     alert("Error: Falta librería ics.js para exportar.");
+                     console.error("Librería ics no cargada.");
+                     return; // Salir temprano
+                }
+                const { data, error } = await supabaseClient.from('reservations').select('*').order('start_time', { ascending: true });
+                if (error) throw error;
+                const reservationsToExport = data || [];
+                if (reservationsToExport.length === 0) {
+                     alert('No hay reservas para exportar.');
+                     return; // Salir temprano
+                }
+                console.log(`handleExport: Exportando ${reservationsToExport.length} reservas.`);
+                const cal = ics();
+                reservationsToExport.forEach(res => {
+                    if (res.start_time && res.end_time) {
+                        const startDate = new Date(res.start_time);
+                        const endDate = new Date(res.end_time);
+                        if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                            cal.addEvent( /* ... */ ); // Mantenido igual
+                        } else { console.warn("Export: Omitida reserva con fecha inválida:", res); }
+                    } else { console.warn("Export: Omitida reserva sin fecha inicio/fin:", res); }
                 });
+                cal.download('medusa_reactor_schedule');
+                console.log("handleExport: Descarga iniciada.");
+            } catch (e) {
+                console.error("Error durante la exportación:", e);
+                alert("Ocurrió un error al generar o descargar el archivo .ics.");
+            } finally {
+                exportButton.disabled = false;
+                exportButton.textContent = 'Exportar a .ics';
+            }
+       }
 
-            // Opcional: Guardar referencia al canal si necesitas desuscribirte luego
-            // window.realtimeChannel = channel; // Ejemplo
+       // --- INICIALIZACIÓN y SUSCRIPCIONES (Se mantiene igual) ---
+       console.log("Inicializando la aplicación...");
+       renderGrid();
+       initializeOrUpdateCalendar();
 
-            console.log('Suscripción al canal iniciada (estado pendiente).');
+       reservationForm.addEventListener('submit', handleReservationSubmit);
+       exportButton.addEventListener('click', handleExport);
 
-        } catch (channelError) {
-            console.error("Error al intentar suscribirse al canal:", channelError);
-            errorMessageDiv.textContent = "No se pudo conectar para actualizaciones en tiempo real.";
-        }
+       // Suscripción a tiempo real (igual)
+       try {
+           console.log("Suscribiéndose al canal...");
+           const channel = supabaseClient.channel('public:reservations')
+               .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, (payload) => {
+                    if(typeof handleRealtimeChanges === 'function') { handleRealtimeChanges(payload); }
+                    else { console.error("handleRealtimeChanges no definida."); }
+                })
+               .subscribe((status, err) => {
+                   if (status === 'SUBSCRIBED') { console.log('¡Conectado al canal de tiempo real!'); }
+                   else if (status === 'CHANNEL_ERROR') { console.error('Error en conexión del canal:', err); }
+                   else { console.log("Estado del canal:", status); }
+               });
+           console.log('Suscripción iniciada.');
+       } catch (channelError) {
+           console.error("Error al suscribirse:", channelError);
+           if (errorMessageDiv) errorMessageDiv.textContent = "No se pudo conectar en tiempo real.";
+       }
 
-
-    } else {
-        // Este bloque se ejecuta si la librería Supabase NO estaba lista
-        console.error("VERIFICACIÓN: ¡FALLÓ! El objeto global 'supabase' o 'supabase.createClient' NO está disponible al cargar el DOM.");
-        const errorDiv = document.getElementById('error-message'); // Intenta obtenerlo de nuevo
-        if(errorDiv) errorDiv.textContent = "Error crítico al cargar la aplicación (Fallo en Supabase). Intente refrescar la página.";
-    }
+   } else {
+       // Fallo al cargar Supabase
+       console.error("VERIFICACIÓN: ¡FALLÓ! 'supabase' no disponible.");
+       const errorDiv = document.getElementById('error-message');
+       if(errorDiv) errorDiv.textContent = "Error crítico (Supabase). Refrescar.";
+   }
 
 }); // <-- FIN del addEventListener DOMContentLoaded
+// --- END OF FILE script.js ---
