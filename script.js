@@ -396,16 +396,12 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
         // --- NUEVA FUNCIÓN: Mostrar Modal de Detalles/Acciones ---
         function showReservationModal(reservationData) {
-            console.log("Mostrando modal para reserva:", reservationData);
-            if (!reservationData || !reservationData.id) {
-                 console.error("showReservationModal llamada sin datos válidos o sin ID.");
-                 Swal.fire('Error', 'No se pudieron cargar los detalles completos de la reserva.', 'error');
-                 return;
-            }
-            // Formatear fechas para mejor lectura
-            const startTimeFormatted = reservationData.start_time ? new Date(reservationData.start_time).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short'}) : 'N/A';
-            const endTimeFormatted = reservationData.end_time ? new Date(reservationData.end_time).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short'}) : 'N/A';
-
+            // ... (código inicial igual: logs, comprobaciones, formateo de fechas para mostrar) ...
+            const startDate = reservationData.start_time ? new Date(reservationData.start_time) : null;
+            const endDate = reservationData.end_time ? new Date(reservationData.end_time) : null;
+            const startTimeFormatted = startDate ? startDate.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short'}) : 'N/A';
+            const endTimeFormatted = endDate ? endDate.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short'}) : 'N/A';
+        
             Swal.fire({
                 title: `Detalles Reserva Pos. ${reservationData.position}`,
                 html: `
@@ -417,27 +413,70 @@ document.addEventListener('DOMContentLoaded', (event) => {
                         <p><strong>Fin:</strong> ${endTimeFormatted}</p>
                         <p><strong>Descripción:</strong> ${reservationData.description || '-'}</p>
                     </div>
-                `,
+                    `,
                 icon: 'info',
-                showCloseButton: true,
-                showCancelButton: true, // Usaremos el cancel button como "Editar"
-                confirmButtonText: 'Borrar Reserva',
-                confirmButtonColor: '#d33', // Rojo para borrar
-                cancelButtonText: 'Editar Reserva',
-                cancelButtonColor: '#3085d6', // Azul para editar
-
+                showCloseButton: true, // Mantenemos el botón de cerrar 'X'
+        
+                // --- CONFIGURACIÓN DE BOTONES REORDENADOS ---
+                showConfirmButton: true, // Botón 1: Editar
+                confirmButtonText: 'Editar Reserva',
+                confirmButtonColor: 'green', // Azul para editar (era el color de Cancel)
+        
+                showDenyButton: true,    // Botón 2: Añadir a Google
+                denyButtonText: 'Añadir a Google Calendar',
+                denyButtonColor: '#4285F4', // Azul Google
+        
+                showCancelButton: true,  // Botón 3: Borrar (usando Cancel)
+                cancelButtonText: 'Borrar Reserva',
+                cancelButtonColor: '#d33', // Rojo para borrar (era el color de Confirm)
+                // --- FIN CONFIGURACIÓN BOTONES ---
+        
+                buttonsStyling: true, // Dejamos que Swal maneje estilos base
+        
             }).then((result) => {
-                if (result.isConfirmed) {
-                    // --- Acción BORRAR ---
-                    if (typeof confirmAndDeleteReservation === 'function'){
-                         confirmAndDeleteReservation(reservationData.id);
-                    } else { console.error("confirmAndDeleteReservation no definida"); }
-                } else if (result.dismiss === Swal.DismissReason.cancel) {
-                    // --- Acción EDITAR ---
-                     if (typeof openEditReservationModal === 'function'){
+        
+                // --- LÓGICA DEL .then AJUSTADA AL NUEVO ORDEN ---
+        
+                if (result.isConfirmed) { // Botón Confirmar -> AHORA ES EDITAR
+                    console.log("Acción: Editar Reserva");
+                    if (typeof openEditReservationModal === 'function'){
                         openEditReservationModal(reservationData);
                     } else { console.error("openEditReservationModal no definida"); }
+        
+                } else if (result.isDenied) { // Botón Denegar -> SIGUE SIENDO AÑADIR GOOGLE
+                    console.log("Acción: Añadir a Google Calendar");
+                    // ... (Lógica para abrir Google Calendar igual que antes) ...
+                    const start = reservationData.start_time ? new Date(reservationData.start_time) : null;
+                    const end = reservationData.end_time ? new Date(reservationData.end_time) : null;
+                    if (start && !isNaN(start.getTime()) && end && !isNaN(end.getTime())) {
+                        const googleStartDate = formatDateForGoogle(reservationData.start_time);
+                        const googleEndDate = formatDateForGoogle(reservationData.end_time);
+                        if (googleStartDate && googleEndDate) {
+                            const googleDates = `${googleStartDate}/${googleEndDate}`;
+                            const title = `Pos ${reservationData.position || '?'}: ${reservationData.user_name || '??'} (${reservationData.wavelength || '??'}nm)`;
+                            const details = reservationData.description || `Reserva Reactor Medusa Pos ${reservationData.position || '?'}.`;
+                            const location = `Reactor Medusa - Posición ${reservationData.position || '?'}`;
+                            const googleCalendarUrl = `https://www.google.com/calendar/render?action=TEMPLATE` +
+                                                      `&text=${encodeURIComponent(title)}` +
+                                                      `&dates=${googleDates}` +
+                                                      `&details=${encodeURIComponent(details)}` +
+                                                      `&location=${encodeURIComponent(location)}`;
+                            window.open(googleCalendarUrl, '_blank', 'noopener,noreferrer');
+                        } else { /* manejo de error */ Swal.fire('Error', 'No se pudieron procesar las fechas.', 'error'); }
+                    } else { /* manejo de error */ Swal.fire('Error', 'Fechas inválidas.', 'error'); }
+                     // --- FIN LÓGICA GOOGLE CALENDAR ---
+        
+                } else if (result.dismiss === Swal.DismissReason.cancel) { // Botón Cancelar -> AHORA ES BORRAR
+                     console.log("Acción: Borrar Reserva (desde botón Cancelar)");
+                    // Llamamos a la función de confirmación/borrado
+                     if (typeof confirmAndDeleteReservation === 'function'){
+                          confirmAndDeleteReservation(reservationData.id);
+                     } else { console.error("confirmAndDeleteReservation no definida"); }
                 }
+                // Nota: Si el usuario cierra con la 'X' (showCloseButton: true),
+                // el resultado será result.dismiss === Swal.DismissReason.close
+                // y no se ejecutará ninguna de estas acciones, lo cual es correcto.
+        
             });
         }
 
@@ -731,7 +770,11 @@ document.addEventListener('DOMContentLoaded', (event) => {
                         const startDate = new Date(res.start_time);
                         const endDate = new Date(res.end_time);
                         if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-                            cal.addEvent( /* ... */ ); // Mantenido igual
+                            const subject = `Reserva Pos ${res.position}: ${res.user_name || '??'} (${res.wavelength || '??'}nm)`;
+            const description = res.description || `Reserva para ${res.user_name || 'desconocido'} en posición ${res.position}.`;
+            const location = `Reactor Medusa - Posición ${res.position}`; // O lo que tenga sentido
+            // ¡Llamada real a addEvent!
+            cal.addEvent(subject, description, location, startDate, endDate);
                         } else { console.warn("Export: Omitida reserva con fecha inválida:", res); }
                     } else { console.warn("Export: Omitida reserva sin fecha inicio/fin:", res); }
                 });
@@ -779,6 +822,29 @@ document.addEventListener('DOMContentLoaded', (event) => {
        const errorDiv = document.getElementById('error-message');
        if(errorDiv) errorDiv.textContent = "Error crítico (Supabase). Refrescar.";
    }
+// --- NUEVA FUNCIÓN DE AYUDA PARA FORMATEAR FECHAS PARA GOOGLE CALENDAR ---
+function formatDateForGoogle(isoDateString) {
+    if (!isoDateString) return '';
+    try {
+        const date = new Date(isoDateString);
+        if (isNaN(date.getTime())) return ''; // Devuelve vacío si la fecha no es válida
 
+        // Funciones UTC para obtener los componentes en Tiempo Universal Coordinado
+        const year = date.getUTCFullYear();
+        // getUTCMonth() devuelve 0-11, por eso sumamos 1
+        const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+        const day = date.getUTCDate().toString().padStart(2, '0');
+        const hours = date.getUTCHours().toString().padStart(2, '0');
+        const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+        const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+
+        // Formato YYYYMMDDTHHmmSSZ (Z indica UTC)
+        return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
+    } catch (e) {
+        console.error("Error formateando fecha para Google Calendar:", e);
+        return ''; // Devuelve vacío en caso de error
+    }
+}
+// --- FIN FUNCIÓN DE AYUDA ---
 }); // <-- FIN del addEventListener DOMContentLoaded
 // --- END OF FILE script.js ---

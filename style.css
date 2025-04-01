@@ -1,24 +1,5 @@
 /* --- START OF FILE style.css (Modificado) --- */
 
-body > header.site-header {
-    text-align: left;
-    margin-bottom: 30px;
-    padding-left: 10px;
-}
-body > header.site-header > h1 {
-    font-size: 2.2em;
-    font-weight: bold;
-    color: #333;
-    margin-top: 0;
-    margin-bottom: 0.1em;
-    line-height: 1.2;
-}
-body > header.site-header > p.subtitle {
-    font-size: 2.2em;
-    color: #555;
-    margin-top: 0.1em;
-    margin-bottom: 0;
-}
 body { font-family: sans-serif; margin: 20px; background-color: #f8f9fa; }
 
 body > footer {
@@ -127,12 +108,12 @@ form button:hover { background-color: #005a9e; }
 }
 
 .card {
-    background-color: #ffffff;
+    background-color: rgb(247, 239, 248);
     border: 1px solid #e0e0e0;
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 20px;
     margin-bottom: 25px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    box-shadow: 0 4px 5px rgba(0,0,0,0.08);
 }
 .card h2 {
     font-size: 1.5em;
@@ -144,5 +125,46 @@ form button:hover { background-color: #005a9e; }
 }
 .card #export-button {
     margin-top: 15px;
+}
+/* --- Estilos para el Nuevo Encabezado --- */
+
+.site-header {
+    display: flex; /* Activa Flexbox: logo y texto en línea */
+    align-items: center; /* Centra verticalmente el logo y el texto */
+    gap: 20px; /* Espacio entre el logo y el bloque de texto */
+    padding: 15px 20px; /* Espacio interior (arriba/abajo - izq/der) */
+    background-color: #f8f9fa; /* Un fondo gris muy claro (puedes cambiarlo) */
+    border-bottom: 1px solid #dee2e6; /* Línea sutil debajo */
+    margin-bottom: 30px; /* Espacio debajo del header */
+    /* Puedes añadir una sombra suave si quieres: */
+    /* box-shadow: 0 2px 5px rgba(0,0,0,0.08); */
+}
+
+#header-logo {
+    height: 50px; /* Ajusta la altura de tu logo */
+    width: auto; /* Mantiene la proporción */
+    display: block; /* Buena práctica para imágenes */
+}
+
+.header-text {
+    /* El div que contiene h1 y p no necesita mucho estilo,
+       Flexbox ya lo posiciona. Podemos quitar márgenes si es necesario. */
+       margin: 0; /* Quita márgenes por defecto si interfieren */
+}
+
+/* Ajustar estilos existentes si es necesario (puede que ya estén bien) */
+.site-header h1 {
+    font-size: 1.8em; /* Puedes ajustar el tamaño */
+    font-weight: bold;
+    color: #343a40; /* Un gris oscuro */
+    margin: 0 0 0.1em 0; /* Poco margen inferior */
+    line-height: 1.2;
+}
+
+.site-header p.subtitle {
+    font-size: 1.1em; /* Puedes ajustar el tamaño */
+    color: #6c757d; /* Un gris más claro */
+    margin: 0;
+    line-height: 1.2;
 }
 /* --- END OF FILE style.css (Modificado) --- */
